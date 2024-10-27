@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UltimaShare</title>
+    <style>
+        body,
+        html {
+            height: 100%;
+            width: 100%;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+        }
+
+        .container {
+            width: 50%;
+            /* Set width to 50% of the screen */
+            max-width: 600px;
+            /* Maximum width for larger screens */
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+
+        .input-box {
+            width: 100%;
+            padding: 10px;
+            font-size: 1em;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            margin-top: 10px;
+            resize: none;
+            box-sizing: border-box;
+        }
+
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        #waiting-message {
+            margin-top: 15px;
+            color: #888;
+            font-size: 0.9em;
+            display: none;
+            /* Initially hidden */
+        }
+
+        #sdp-output {
+            width: 100%;
+            height: 100px;
+            /* Set height for the textarea */
+            padding: 10px;
+            font-size: 1em;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            resize: none;
+            /* Disable resizing */
+            box-sizing: border-box;
+            overflow: auto;
+            /* Allow scrolling if content exceeds */
+            margin-top: 20px;
+            display: none;
+            /* Spacing above */
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 1em;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        #copy-button {
+            display: none;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .container-bottom {
+            position: fixed;
+            bottom: 20px;
+            width: 80%;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .input-box {
+            width: 100%;
+            padding: 10px;
+            font-size: 1em;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            margin-top: 10px;
+            resize: none;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 1em;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            margin: 10px auto;
+            display: none;
+            /* Initially hidden */
+        }
+
+        button.visible {
+            display: inline-block;
+            /* Display button only when class "visible" is added */
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Your Token</h1>
+
+        <!-- Spinner for loading -->
+        <div id="loader" class="loader"></div>
+        <div id="waiting-message">
+            <p>🙏 We’re so sorry for the delay — thank you for your patience.<br />💫 We're nearly there, and it won’t
+                be
+                much longer!</p>
+        </div>
+
+        <!-- Display encrypted SDP as modern styled text -->
+        <textarea id="sdp-output" disabled readonly placeholder="Encrypted SDP will appear here."></textarea>
+
+        <!-- Copy Token Button -->
+        <button id="copy-button" class="visible">Copy Token</button>
+    </div>
+
+    <!-- Bottom container for SDP input and decoding -->
+    <div class="container-bottom">
+        <!-- Input box for pasting encrypted SDP -->
+        <textarea id="sdp-input" class="input-box" placeholder="Paste remote token here to connect"></textarea>
+
+        <!-- Decode Button -->
+        <button id="decode-button">Connect</button>
+    </div>
+
+    <script src="https://cdn.socket.io/socket.io-1.4.0.js"></script>
+    <script>
+        // Show button only when there's text in the input
+        const socket = io(); // Connect to the WebSocket\
+
+        const sdpInput = document.getElementById('sdp-input');
+        const decodeButton = document.getElementById('decode-button');
+        const peerConnection = new RTCPeerConnection({
+            iceServers: [
+                { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }
+            ]
+        });
+        let dataChannel = null;
+        let roomId = null;
+        peerConnection.ondatachannel = (event) => {
+            dataChannel = event.channel,
+                dataChannel.onmessage = e => { console.log("Message: ", e) },
+                dataChannel.onopen = e => { console.log("Connection opened") }
+        }
+
+        // HTML structure for the modal notification
+        document.body.insertAdjacentHTML('beforeend', `
+            <div id="connection-modal" style="
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.6);
+                z-index: 1000;
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
+            ">
+                <div style="
+                    color: white;
+                    font-size: 24px;
+                    padding: 20px 40px;
+                    background: rgba(0, 0, 0, 0.8);
+                    border-radius: 12px;
+                    text-align: center;
+                    z-index: 1010;
+                ">
+                    🎉 You are now connected! 🎉
+                </div>
+                <div id="emoji-bg" style="position: absolute; width: 100%; height: 100%; overflow: hidden; z-index: 1001;"></div>
+            </div>
+        `);
+
+        // Function to display the modal notification
+        function showConnectionModal(message) {
+            const modal = document.getElementById('connection-modal');
+            modal.style.display = 'flex';
+
+            // Fill the background with emojis
+            fillEmojiBackground();
+
+            // Hide the modal after 2 seconds
+            setTimeout(() => {
+                modal.style.display = 'none';
+                document.getElementById('emoji-bg').innerHTML = ""; // Clear emojis after hiding
+            }, 2000);
+        }
+
+        // Function to fill background with emojis for a celebratory effect
+        function fillEmojiBackground() {
+            const emojiContainer = document.getElementById('emoji-bg');
+            const emojis = ["🎉", "🎊", "🥳", "✨", "🎈"];
+            const totalEmojis = 100;
+
+            for (let i = 0; i < totalEmojis; i++) {
+                const emojiElement = document.createElement('div');
+                emojiElement.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+                emojiElement.style.position = 'absolute';
+                emojiElement.style.fontSize = `${Math.random() * 24 + 24}px`;
+                emojiElement.style.color = 'white';
+                emojiElement.style.left = `${Math.random() * 100}vw`;
+                emojiElement.style.top = `${Math.random() * 100}vh`;
+                emojiElement.style.opacity = Math.random();
+                emojiContainer.appendChild(emojiElement);
+            }
+        }
+
+        // Listen for a confirmation message when joining a room
+        socket.on('room_joined', function (data) {
+            console.log("Joined", data)
+        });
+
+        socket.on("connected_with_peer", function (data) {
+            showConnectionModal("You are now connected!")
+        })
+
+        // Listen for 'receive_answer' event and set up RTC connection
+        socket.on('receive_answer', async function (data) {
+            const answerSDP = data.answer; // Received SDP answer in base64 format
+            console.log(data.answer)
+            const decodedAnswer = atob(answerSDP); // Decode from base64
+
+            try {
+                // Set the received answer as the remote description
+                await peerConnection.setRemoteDescription(new RTCSessionDescription({
+                    type: 'answer',
+                    sdp: decodedAnswer
+                }));
+
+                console.log("RTC connection established with the received answer.");
+                socket.emit("connection_successfully", { room_id: roomId })
+                showConnectionModal("You are now connected!");
+
+
+                // Optionally, handle ICE candidates and other setup tasks here
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        console.log("New ICE candidate received:", event.candidate);
+                    }
+                };
+
+            } catch (error) {
+                console.error("Failed to establish RTC connection with the received answer:", error);
+            }
+        });
+
+        // Copy token to clipboard
+        document.getElementById('copy-button').onclick = function () {
+            const sdpOutput = document.getElementById('sdp-output');
+            const copyButton = document.getElementById('copy-button');
+
+            navigator.clipboard.writeText(sdpOutput.value)
+                .then(() => {
+                    // Change button text to "Copied!!!"
+                    copyButton.textContent = "Copied 🎉";
+                    // Revert back to "Copy Token" after 2 seconds
+                    setTimeout(() => {
+                        copyButton.textContent = "Copy Token";
+                    }, 2000);
+                })
+                .catch(err => {
+                    console.error("Could not copy text: ", err);
+                });
+        };
+
+        sdpInput.addEventListener('input', () => {
+            if (sdpInput.value.trim() !== "") {
+                decodeButton.style.display = 'block'; // Show button
+            } else {
+                decodeButton.style.display = 'none'; // Hide button
+            }
+        });
+
+        // Decode SDP and send the answer using WebSocket
+        decodeButton.onclick = async function () {
+            const sdpInputValue = sdpInput.value.trim();
+
+            try {
+                let decodedSDP = atob(sdpInputValue);
+                decodedSDP = JSON.parse(decodedSDP);
+
+                // Set the remote description with the decoded SDP
+                await peerConnection.setRemoteDescription(new RTCSessionDescription({
+                    type: 'offer',
+                    sdp: decodedSDP.offer
+                }));
+
+                // Handle ICE candidates if necessary
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        console.log('New ICE candidate:', peerConnection.localDescription);
+                    }
+                };
+
+                // Create and set local answer, then send it via WebSocket
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+
+                // Send the answer via WebSocket to the specified room
+                const return_data = {
+                    answer: btoa(peerConnection.localDescription.sdp),
+                    room_id: decodedSDP.room_id
+                }
+                roomId = decodedSDP.roomId;
+                socket.emit("send_answer", return_data);
+
+                console.log("RTC connection established and answer sent to the server.", return_data);
+
+            } catch (error) {
+                console.error("Error:", error);
+            }
+        };
+
+
+        async function fetchSDP() {
+            try {
+
+                dataChannel = peerConnection.createDataChannel("dummyChannel");
+                dataChannel.onmessage = e => { console.log("Message: ", e) }
+                dataChannel.onopen = e => { console.log("Connection opened") }
+
+
+                function waitForAllICE(pc) {
+                    return new Promise((resolve) => {
+                        pc.onicecandidate = (iceEvent) => {
+                            if (iceEvent.candidate === null) resolve();
+                        };
+                    });
+                }
+
+                const waitingMessage = document.getElementById('waiting-message');
+                const timeoutId = setTimeout(() => {
+                    document.getElementById('waiting-message').style.display = 'block';
+                }, 10000);
+
+                peerConnection.onicecandidate = (event) => { console.log(event) };
+
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                await waitForAllICE(peerConnection);
+
+                clearTimeout(timeoutId);
+                document.getElementById('waiting-message').style.display = 'none';
+                document.getElementById('copy-button').style.display = 'block';
+                document.getElementById('sdp-output').style.display = 'block';
+
+                // Create the object
+                const sdpObject = {
+                    room_id: roomId,
+                    offer: peerConnection.localDescription.sdp // Use raw SDP for now
+                };
+
+                // Encrypt the entire object
+                const encryptedObject = btoa(JSON.stringify(sdpObject)); // Base64 encode the whole object
+
+                socket.emit('join_room', { room_id: roomId });
+
+
+                // Return the encrypted object
+                return encryptedObject;
+
+            } catch (error) {
+                console.error('Error gathering SDP:', error);
+                return null;
+            }
+        }
+
+
+        async function fetchRoomId() {
+            try {
+                const response = await fetch('http://127.0.0.1:5000/rest_endpoints/create_room'); // Call the create_room endpoint
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const data = await response.json();
+                roomId = data.room_id;
+                console.log("Room ID stored in local storage:", data.room_id);
+            } catch (error) {
+                console.error("Error fetching room ID:", error);
+            }
+        }
+
+        // Fetch and display encrypted SDP on page load
+        window.onload = async function () {
+            const loader = document.getElementById('loader');
+            const sdpOutput = document.getElementById('sdp-output');
+
+            // Call the fetchRoomId function to create a room
+            await fetchRoomId();
+
+            const encryptedSDP = await fetchSDP();
+            loader.style.display = 'none'; // Hide loader when done
+
+            if (encryptedSDP) {
+                sdpOutput.style.display = 'block'; // Show SDP output only when available
+                sdpOutput.textContent = encryptedSDP;
+            } else {
+                sdpOutput.textContent = 'Error gathering SDP data.';
+            }
+        };
+
+    </script>
+
+</body>
+
+</html>
