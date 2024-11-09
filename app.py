@@ -17,4 +17,4 @@ app.register_blueprint(rest_endpoints)
 
 
 if __name__ == "__main__":
-    socketio.run(app, debug=True)
+    socketio.run(app, debug=True, port=8080)

@@ -198,17 +198,18 @@
             justify-content: space-evenly;
             padding: 10px;
             overflow: hidden;
+            flex-direction: column;
         }
 
         /* Column style for received files */
         .files-column {
-            width: 45%;
             display: flex;
             flex-direction: column;
             background-color: #f9f9f9;
             border-right: 1px solid #ddd;
             padding: 10px;
             overflow-y: auto;
+            height: 100%;
         }
 
         /* Styling for the received files list */
@@ -259,11 +260,11 @@
 
         /* Column style for file upload section */
         .upload-column {
-            width: 45%;
             display: flex;
             flex-direction: column;
             padding: 10px;
             overflow-y: auto;
+            height: 100%;
         }
 
         /* Dropzone for file upload */
@@ -772,7 +773,7 @@
 
         async function fetchRoomId() {
             try {
-                const response = await fetch('http://127.0.0.1:5000/rest_endpoints/create_room'); // Call the create_room endpoint
+                const response = await fetch('https://a7dd-103-208-68-104.ngrok-free.app/rest_endpoints/create_room'); // Call the create_room endpoint
                 if (!response.ok) {
                     throw new Error('Network response was not ok');
                 }
