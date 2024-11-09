@@ -151,6 +151,134 @@
         button:hover {
             background-color: #2980b9;
         }
+
+        /* Background for the whole modal */
+        #file-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Main container for modal */
+        .modal-container {
+            width: 80%;
+            height: 80%;
+            background-color: white;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header style for the modal */
+        .modal-header {
+            height: 10%;
+            background-color: #3498db;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            font-weight: bold;
+            border-radius: 10px 10px 0 0;
+        }
+
+        /* Main content area within the modal */
+        .modal-content {
+            height: 90%;
+            display: flex;
+            flex-direction: row;
+            justify-content: space-evenly;
+            padding: 10px;
+            overflow: hidden;
+        }
+
+        /* Column style for received files */
+        .files-column {
+            width: 45%;
+            display: flex;
+            flex-direction: column;
+            background-color: #f9f9f9;
+            border-right: 1px solid #ddd;
+            padding: 10px;
+            overflow-y: auto;
+        }
+
+        /* Styling for the received files list */
+        #file-list {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fff;
+        }
+
+        /* Styling for each file item */
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 5px 10px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        /* Index column */
+        .file-index {
+            width: 10%;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        /* Filename column */
+        .file-name {
+            width: 70%;
+            text-overflow: ellipsis;
+            overflow: hidden;
+            white-space: nowrap;
+            padding-left: 5px;
+        }
+
+        /* Download button column */
+        .file-download {
+            width: 10%;
+            text-align: center;
+            cursor: pointer;
+        }
+
+        .file-download i {
+            font-size: 16px;
+            color: #333;
+        }
+
+        /* Column style for file upload section */
+        .upload-column {
+            width: 45%;
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            overflow-y: auto;
+        }
+
+        /* Dropzone for file upload */
+        .upload-dropzone {
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            border: 2px dashed #bbb;
+            border-radius: 5px;
+            padding: 20px;
+            cursor: pointer;
+            background-color: #f9f9f9;
+        }
     </style>
 </head>
 
@@ -182,7 +310,41 @@
         <button id="decode-button">Connect</button>
     </div>
 
+    <div id="file-modal">
+        <div class="modal-container">
+            <!-- Header for the Modal -->
+            <div class="modal-header">
+                File Transfer
+            </div>
+
+            <!-- Main Content Area -->
+            <div class="modal-content">
+                <!-- Received Files Column -->
+                <div class="files-column">
+                    <div>
+                        <h3>Received Files</h3>
+                    </div>
+                    <div id="file-list">
+                        <!-- Received files will be dynamically added here -->
+                    </div>
+                </div>
+
+                <!-- Upload Files Column -->
+                <div class="upload-column">
+                    <div>
+                        <h3>Upload a File</h3>
+                    </div>
+                    <div id="upload-dropzone" class="upload-dropzone">
+                        Click or Drag & Drop to Upload
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.socket.io/socket.io-1.4.0.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+
     <script>
         // Show button only when there's text in the input
         const socket = io(); // Connect to the WebSocket\
@@ -196,11 +358,152 @@
         });
         let dataChannel = null;
         let roomId = null;
+        let receivedFiles = {}; // Object to store files in progress
+
         peerConnection.ondatachannel = (event) => {
-            dataChannel = event.channel,
-                dataChannel.onmessage = e => { console.log("Message: ", e) },
-                dataChannel.onopen = e => { console.log("Connection opened") }
+            dataChannel = event.channel
         }
+
+        // Optionally, handle ICE candidates and other setup tasks here
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate) {
+                console.log("New ICE candidate received:", event.candidate);
+            }
+        };
+
+
+
+        function toggleFileModal(show) {
+            const modal = document.getElementById('file-modal');
+            modal.style.display = show ? 'flex' : 'none';
+        }
+
+        // Drag & Drop and Click Upload handling
+        const dropzone = document.getElementById('upload-dropzone');
+
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.style.backgroundColor = '#555';
+        });
+
+        dropzone.addEventListener('dragleave', () => {
+            dropzone.style.backgroundColor = '#222';
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.style.backgroundColor = '#222';
+            handleFileUpload(e.dataTransfer.files);
+        });
+
+        dropzone.addEventListener('click', () => {
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.onchange = (e) => handleFileUpload(e.target.files);
+            fileInput.click();
+        });
+
+        function handleFileUpload(files) {
+            Array.from(files).forEach(file => {
+                console.log(`Preparing to upload ${file.name}`);
+
+                if (dataChannel && dataChannel.readyState === "open") {
+                    const chunkSize = 16 * 1024; // 16 KB per chunk
+                    const reader = new FileReader();
+                    let offset = 0;
+                    let chunkIndex = 0;
+
+                    // Function to read and send a chunk of the file
+                    reader.onload = (e) => {
+                        const chunk = new Uint8Array(e.target.result);
+                        console.log(chunk, e.target.result)
+                        const data = JSON.stringify({
+                            type: 'fileChunk',
+                            chunkIndex,
+                            chunk: chunk.toString(),
+                            fileName: file.name
+                        })
+                        // Send chunk data with index for tracking
+                        console.log("Data being sent ->", data)
+                        dataChannel.send(data);
+
+                        offset += chunkSize;
+                        chunkIndex++;
+
+                        // If not the last chunk, read the next chunk
+                        if (offset < file.size) {
+                            readNextChunk();
+                        } else {
+                            // If file completely sent, notify receiver with 'fileEnd'
+                            console.log(`File ${file.name} uploaded successfully.`);
+                            dataChannel.send(JSON.stringify({ type: 'fileEnd', fileName: file.name }));
+                        }
+                    };
+
+                    // Function to read the next chunk
+                    const readNextChunk = () => {
+                        const blob = file.slice(offset, offset + chunkSize);
+                        reader.readAsArrayBuffer(blob);
+                    };
+
+                    // Initial message to start file transfer
+                    dataChannel.send(JSON.stringify({ type: 'fileStart', fileName: file.name, fileSize: file.size }));
+                    readNextChunk();
+                } else {
+                    console.error("Data channel is not open. Unable to upload file.");
+                }
+            });
+        }
+
+
+        // Counter for received files
+        let fileIndex = 1;
+
+        // Function to add files to the received files list
+        function addFileToList(filename, fileBlob) {
+            const fileList = document.getElementById('file-list');
+
+            const fileItem = document.createElement('div');
+            fileItem.className = 'file-item';
+
+            // File index div (10% width)
+            const indexDiv = document.createElement('div');
+            indexDiv.className = 'file-index';
+            indexDiv.textContent = fileIndex++;
+
+            // File name div (70% width)
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'file-name';
+            nameDiv.textContent = filename;
+
+            // Download button div (10% width)
+            const downloadDiv = document.createElement('div');
+            downloadDiv.className = 'file-download';
+
+            const downloadIcon = document.createElement('i');
+            downloadIcon.className = 'fas fa-download'; // Font Awesome download icon classes
+            downloadIcon.title = 'Download';
+            downloadIcon.style.cursor = 'pointer';
+            downloadIcon.onclick = () => {
+                const url = URL.createObjectURL(fileBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url); // Clean up
+            };
+
+            downloadDiv.appendChild(downloadIcon);
+
+            // Append child elements to the file item
+            fileItem.appendChild(indexDiv);
+            fileItem.appendChild(nameDiv);
+            fileItem.appendChild(downloadDiv);
+
+            // Append file item to file list
+            fileList.appendChild(fileItem);
+        }
+
 
         // HTML structure for the modal notification
         document.body.insertAdjacentHTML('beforeend', `
@@ -244,6 +547,7 @@
             setTimeout(() => {
                 modal.style.display = 'none';
                 document.getElementById('emoji-bg').innerHTML = ""; // Clear emojis after hiding
+                toggleFileModal(true);
             }, 2000);
         }
 
@@ -291,15 +595,6 @@
                 console.log("RTC connection established with the received answer.");
                 socket.emit("connection_successfully", { room_id: roomId })
                 showConnectionModal("You are now connected!");
-
-
-                // Optionally, handle ICE candidates and other setup tasks here
-                peerConnection.onicecandidate = (event) => {
-                    if (event.candidate) {
-                        console.log("New ICE candidate received:", event.candidate);
-                    }
-                };
-
             } catch (error) {
                 console.error("Failed to establish RTC connection with the received answer:", error);
             }
@@ -377,8 +672,56 @@
             try {
 
                 dataChannel = peerConnection.createDataChannel("dummyChannel");
-                dataChannel.onmessage = e => { console.log("Message: ", e) }
+                dataChannel.onmessage = (event) => {
+                    const message = JSON.parse(event.data);
+                    console.log("Message Received", message);
+
+                    if (message.type === 'fileStart') {
+                        // Initialize a new file reception
+                        const { fileName, fileSize } = message;
+                        console.log(`Receiving file: ${fileName} (${fileSize} bytes)`);
+
+                        // Store the file in progress with indexed chunk storage
+                        receivedFiles[fileName] = {
+                            fileName,
+                            fileSize,
+                            fileData: [], // Array to store chunks by index
+                            totalReceived: 0,
+                            expectedChunks: Math.ceil(fileSize / (16 * 1024)) // Estimate number of chunks expected
+                        };
+                    } else if (message.type === 'fileChunk') {
+                        // This is a file chunk
+                        const { fileName, chunkIndex, chunk } = message;
+                        const file = receivedFiles[fileName];
+
+                        if (file) {
+                            // Ensure chunks are added in order
+                            file.fileData[chunkIndex] = Uint8Array.from(chunk.split(',')); // Store chunk at the correct index
+                            file.totalReceived += chunk.length;
+
+                            console.log(`Received ${file.totalReceived} / ${file.fileSize} bytes for ${fileName}`);
+
+
+                        }
+                    } else if (message.type === 'fileEnd') {
+                        // Finalization handled above in the chunk check, no further action needed here
+                        console.log(`File end received for ${message.fileName}`);
+                        // Check if the entire file has been received
+                        const fileName = message.fileName
+                        const file = receivedFiles[fileName];
+                        console.log(`File ${fileName} received completely.`);
+
+                        // Compile file from ordered chunks
+                        const receivedBlob = new Blob(file.fileData);
+                        const url = URL.createObjectURL(receivedBlob);
+
+                        // Add file to received files list
+                        addFileToList(fileName, receivedBlob);
+                    }
+                };
+
                 dataChannel.onopen = e => { console.log("Connection opened") }
+
 
 
                 function waitForAllICE(pc) {
